@@ -66,8 +66,9 @@ Notes:
   on non-Linux runners.
 - The `apache.snapshots` Maven repository is blocked via a mirror in
   `settings.xml`, so builds cannot silently depend on snapshot artifacts.
-- A new push to a PR cancels that PR's in-progress run; runs for pushes to
-  `main` are never canceled.
+- A new push to a PR cancels that PR's in-progress run, and so does closing
+  or merging the PR. Runs for pushes to `main` are never canceled.
+  `CI :: CI Tests` and `Dev :: Tests` follow the same rules.
 - After the build, a Surefire report step fails the job on test failures, and
   the build logs (`build.log`) plus the reproducibility outputs
   (`*.buildcompare`, `*.buildinfo`) are uploaded as workflow artifacts.
@@ -98,6 +99,22 @@ for the CI scripts themselves: the scenarios under
 [`script/ci/tests/`](../script/ci/tests/) verify that build-scope computation
 and summary generation behave as expected. If you change anything in
 `script/ci/`, this is the check that guards it.
+
+## `Dev :: Tests`
+
+Defined in [dev-tests.yaml](../.github/workflows/dev-tests.yaml). Tests for the
+local partial build — [`script/dev/`](../script/dev/) and the `dev` target
+in the [Makefile](../Makefile). See [DEV.md](./DEV.md).
+
+Two jobs. `Dev scripts` runs the two unit suites, which build throwaway git
+repositories and dependency graphs in temp directories and never invoke Maven,
+so it takes seconds. `make dev in a fresh clone` then runs `make dev` for real
+on a checkout that has never been built, with the Maven cache deliberately
+disabled — that is the case where the upstream pass has to notice nothing is
+installed, so it does build, and takes minutes.
+
+If you change anything under `script/dev/` or the Makefile, this is the check
+that guards it.
 
 ## License header check
 

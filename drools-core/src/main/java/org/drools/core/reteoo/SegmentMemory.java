@@ -36,8 +36,8 @@ import org.drools.core.reteoo.AsyncReceiveNode.AsyncReceiveMemory;
 import org.drools.core.reteoo.QueryElementNode.QueryElementNodeMemory;
 import org.drools.core.reteoo.TupleToObjectNode.SubnetworkPathMemory;
 import org.drools.core.reteoo.TimerNode.TimerNodeMemory;
-import org.drools.core.util.LinkedList;
-import org.drools.core.util.DoubleLinkedEntry;
+import org.drools.base.util.LinkedList;
+import org.drools.base.util.DoubleLinkedEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1162,6 +1162,19 @@ public class SegmentMemory extends LinkedList<SegmentMemory>
         }
     }
 
+    public static class SequenceMemoryPrototype extends MemoryPrototype {
+
+        public SequenceMemoryPrototype(long nodePosMaskBit) {
+            this.nodePosMaskBit = nodePosMaskBit;
+        }
+
+        @Override
+        public void populateMemory(NodeMemories nodeMemories, SegmentMemorySupport segmentMemorySupport, Memory mem) {
+            SequenceNode.SequenceNodeMemory seqmem = (SequenceNode.SequenceNodeMemory)  mem;
+            seqmem.setNodePosMaskBit(nodePosMaskBit);
+        }
+    }
+
     public static class AsyncSendMemoryPrototype extends MemoryPrototype {
 
         public AsyncSendMemoryPrototype() {}
@@ -1189,6 +1202,21 @@ public class SegmentMemory extends LinkedList<SegmentMemory>
 
         public AccumulateMemoryPrototype(BetaMemoryPrototype betaProto) {
             this.betaProto = betaProto;
+            this.nodePosMaskBit = betaProto.getNodePosMaskBit();
+        }
+
+        @Override
+        public void setNodePosMaskBit(long nodePosMaskBit) {
+            // the bit lives in the wrapped BetaMemoryPrototype, which populateMemory() copies into the BetaMemory:
+            // keep both in sync, otherwise a segment split (SegmentPrototype.splitProtos) renumbers only this
+            // wrapper and the accumulate node's BetaMemory keeps its pre-split position bit
+            super.setNodePosMaskBit(nodePosMaskBit);
+            betaProto.setNodePosMaskBit(nodePosMaskBit);
+        }
+
+        @Override
+        public long getNodePosMaskBit() {
+            return betaProto.getNodePosMaskBit();
         }
 
         @Override
