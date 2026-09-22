@@ -23,41 +23,41 @@ set -euo pipefail
 # Master orchestrator for the local-first release workflow.
 #
 # Runs the individual release scripts in the correct order for a full release
-# candidate cycle (R commit → build → deploy to staging).  Each step can also
-# be run independently — see script/release/README.md.
+# candidate cycle (02-rc-commit.sh -> 03-build.sh -> 04-deploy-to-staging.sh).
+# Each step can also be run independently — see script/release/README.md.
 #
 # Usage:
-#   ./script/release/release-all.sh --version <version> --tag <rc-tag> [OPTIONS]
+#   ./script/release/release-all.sh <version> [--tag <tag>] [OPTIONS]
+#   ./script/release/release-all.sh --version <version> [--tag <tag>] [OPTIONS]
 #
-# Required:
-#   --version <ver>           Exact release version, e.g. 10.3.0
-#   --tag <tag>               RC tag name, e.g. 10.3.0-rc1
+# Required (one of):
+#   <version> or --version <ver>   Exact release version, e.g. 10.3.0
+#
+# Optional tags:
+#   --tag <tag> | --rc-tag <tag>   RC tag name, e.g. 10.3.0-rc1 (defaults to <version>-rc1)
+#   --rc                           Explicit flag indicating RC mode
 #
 # Optional build flags:
-#   --jitexecutor-native      Also build the jitexecutor native binary
-#                             (requires GraalVM + Docker)
-#   --maven-opts <opts>       Extra Maven options forwarded to build.sh
+#   --skip-tests | --skip-build    Skip tests during the build
+#   --maven-opts <opts>            Extra Maven options forwarded to build.sh
 #
-# Optional deploy flags:
-#   --deploy                  Deploy JARs to Nexus staging after the build
-#   --staging-url <url>       Nexus staging URL (default: Apache Nexus)
+# Optional deploy/publish flags:
+#   --deploy | --publish           Deploy JARs to Nexus staging after the build
+#   --staging-url <url>            Nexus staging URL (default: Apache Nexus)
 #
 # Optional git flags:
-#   --push-tag                Push the RC tag to origin after creating it
+#   --push | --push-tag            Push the RC tag to origin after creating it
 #
 # Other:
-#   --skip-tests              Skip tests during the build (default: tests run)
-#   --dry-run                 Print what would happen without executing anything
+#   --dry-run                      Print what would happen without executing anything
 #
 # Examples:
-#   # Full local RC candidate — no remote effects
+#   # Positional or flag version
+#   ./script/release/release-all.sh 10.3.0 --rc --skip-tests
 #   ./script/release/release-all.sh --version 10.3.0 --tag 10.3.0-rc1 --skip-tests
 #
 #   # Full RC with deploy to Apache Nexus staging and push tag to origin
-#   ./script/release/release-all.sh \
-#       --version 10.3.0 --tag 10.3.0-rc1 \
-#       --skip-tests --deploy --push-tag \
-#       --jitexecutor-native
+#   ./script/release/release-all.sh 10.3.0 --tag 10.3.0-rc1 --skip-tests --deploy --push-tag
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -65,7 +65,6 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RELEASE_VERSION=""
 TAG_NAME=""
 SKIP_TESTS=false
-JITEXECUTOR_NATIVE=false
 EXTRA_MVN_OPTS=""
 DEPLOY=false
 STAGING_URL=""
@@ -75,37 +74,45 @@ DRY_RUN=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --version)       RELEASE_VERSION="${2:-}"; shift 2 ;;
-        --tag)           TAG_NAME="${2:-}"; shift 2 ;;
-        --skip-tests)    SKIP_TESTS=true; shift ;;
-        --jitexecutor-native) JITEXECUTOR_NATIVE=true; shift ;;
+        --tag|--rc-tag)  TAG_NAME="${2:-}"; shift 2 ;;
+        --rc)            shift ;; # Accepted for parity with tools repo
+        --skip-tests|--skip-build) SKIP_TESTS=true; shift ;;
         --maven-opts)    EXTRA_MVN_OPTS="${2:-}"; shift 2 ;;
-        --deploy)        DEPLOY=true; shift ;;
+        --deploy|--publish) DEPLOY=true; shift ;;
         --staging-url)   STAGING_URL="${2:-}"; shift 2 ;;
-        --push-tag)      PUSH_TAG=true; shift ;;
+        --push|--push-tag) PUSH_TAG=true; shift ;;
         --dry-run)       DRY_RUN=true; shift ;;
         *)
-            echo "Unknown option: $1"
-            echo "Usage: $0 --version <version> --tag <tag> [OPTIONS]"
-            exit 1
+            if [[ -z "${RELEASE_VERSION}" && ! "$1" =~ ^- ]]; then
+                RELEASE_VERSION="$1"
+                shift
+            else
+                echo "Unknown option: $1"
+                echo "Usage: $0 [<version> | --version <version>] [--tag <tag>] [OPTIONS]"
+                exit 1
+            fi
             ;;
     esac
 done
 
-if [[ -z "${RELEASE_VERSION}" || -z "${TAG_NAME}" ]]; then
-    echo "ERROR: --version and --tag are required."
-    echo "Usage: $0 --version 10.3.0 --tag 10.3.0-rc1 [OPTIONS]"
+if [[ -z "${RELEASE_VERSION}" ]]; then
+    echo "ERROR: Version is required."
+    echo "Usage: $0 10.3.0 [--tag 10.3.0-rc1] [OPTIONS]"
     exit 1
+fi
+
+if [[ -z "${TAG_NAME}" ]]; then
+    TAG_NAME="${RELEASE_VERSION}-rc1"
 fi
 
 cd "${REPO_ROOT}"
 
 echo ""
 echo "=========================================="
-echo "Apache KIE Drools — release-all"
+echo "Apache KIE repo — release-all"
 echo "Version         : ${RELEASE_VERSION}"
 echo "RC tag          : ${TAG_NAME}"
 echo "Skip tests      : ${SKIP_TESTS}"
-echo "Jitexecutor nat.: ${JITEXECUTOR_NATIVE}"
 echo "Deploy staging  : ${DEPLOY}"
 echo "Push tag        : ${PUSH_TAG}"
 echo "Dry run         : ${DRY_RUN}"
@@ -129,29 +136,34 @@ run_step() {
     echo "✅  ${step_name} — done"
 }
 
-# ── STEP 1: R commit + RC tag ─────────────────────────────────────────────────
+# ── STEP 1 (Automation D.1): R commit + RC tag ───────────────────────────────
 
-RC_COMMIT_ARGS=("${SCRIPT_DIR}/rc-commit.sh" "--version" "${RELEASE_VERSION}" "--tag" "${TAG_NAME}")
+RC_COMMIT_SCRIPT="${SCRIPT_DIR}/02-rc-commit.sh"
+[[ ! -f "${RC_COMMIT_SCRIPT}" ]] && RC_COMMIT_SCRIPT="${SCRIPT_DIR}/rc-commit.sh"
+
+RC_COMMIT_ARGS=("${RC_COMMIT_SCRIPT}" "--version" "${RELEASE_VERSION}" "--tag" "${TAG_NAME}")
 [[ "${PUSH_TAG}" == "true" ]] && RC_COMMIT_ARGS+=("--push")
 [[ "${DRY_RUN}" == "true" ]]  && RC_COMMIT_ARGS+=("--dry-run")
 
-run_step "R commit + RC tag" "${RC_COMMIT_ARGS[@]}"
+run_step "R commit + RC tag (02-rc-commit.sh)" "${RC_COMMIT_ARGS[@]}"
 
-# ── STEP 2: Build ─────────────────────────────────────────────────────────────
+# ── STEP 2 (Automation D.2): Build ───────────────────────────────────────────
 
-BUILD_ARGS=("${SCRIPT_DIR}/build.sh")
+BUILD_SCRIPT="${SCRIPT_DIR}/03-build.sh"
+[[ ! -f "${BUILD_SCRIPT}" ]] && BUILD_SCRIPT="${SCRIPT_DIR}/build.sh"
+
+BUILD_ARGS=("${BUILD_SCRIPT}")
 [[ "${SKIP_TESTS}" == "true" ]]       && BUILD_ARGS+=("--skip-tests")
-[[ "${JITEXECUTOR_NATIVE}" == "true" ]] && BUILD_ARGS+=("--jitexecutor-native")
 [[ -n "${EXTRA_MVN_OPTS}" ]]          && BUILD_ARGS+=("--maven-opts" "${EXTRA_MVN_OPTS}")
 
-# The build must run at the RC tag commit.  rc-commit.sh leaves HEAD on the
+# The build must run at the RC tag commit. 02-rc-commit.sh leaves HEAD on the
 # development branch, so we check out the tag, build, then return.
 if [[ "${DRY_RUN}" == "true" ]]; then
-    run_step "Build @ ${TAG_NAME}" echo "[DRY RUN] git checkout ${TAG_NAME} && ${BUILD_ARGS[*]} && git checkout -"
+    run_step "Build @ ${TAG_NAME} (03-build.sh)" echo "[DRY RUN] git checkout ${TAG_NAME} && ${BUILD_ARGS[*]} && git checkout -"
 else
     echo ""
     echo "────────────────────────────────────────"
-    echo "STEP: Build @ ${TAG_NAME}"
+    echo "STEP: Build @ ${TAG_NAME} (03-build.sh)"
     echo "────────────────────────────────────────"
     git checkout "${TAG_NAME}"
     "${BUILD_ARGS[@]}"
@@ -159,12 +171,15 @@ else
     echo "✅  Build — done"
 fi
 
-# ── STEP 3: Deploy to Nexus staging (optional) ───────────────────────────────
+# ── STEP 3 (Automation D.3): Deploy to Nexus staging (optional) ──────────────
 
 if [[ "${DEPLOY}" == "true" ]]; then
-    DEPLOY_ARGS=("${SCRIPT_DIR}/deploy-to-staging.sh" "--tag" "${TAG_NAME}" "--deploy")
+    DEPLOY_SCRIPT="${SCRIPT_DIR}/04-deploy-to-staging.sh"
+    [[ ! -f "${DEPLOY_SCRIPT}" ]] && DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-to-staging.sh"
+
+    DEPLOY_ARGS=("${DEPLOY_SCRIPT}" "--tag" "${TAG_NAME}" "--deploy")
     [[ -n "${STAGING_URL}" ]] && DEPLOY_ARGS+=("--staging-url" "${STAGING_URL}")
-    run_step "Deploy to Nexus staging" "${DEPLOY_ARGS[@]}"
+    run_step "Deploy to Nexus staging (04-deploy-to-staging.sh)" "${DEPLOY_ARGS[@]}"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
@@ -181,9 +196,9 @@ if [[ "${DEPLOY}" == "true" ]]; then
     echo "Close the staging repo, then start the vote on dev@kie.apache.org."
 else
     echo "Artifacts are in your local ~/.m2 repository only."
-    echo "Run deploy-to-staging.sh --tag ${TAG_NAME} --deploy when ready."
+    echo "Run 04-deploy-to-staging.sh --tag ${TAG_NAME} --deploy when ready."
 fi
 echo ""
 echo "When the vote passes, promote the RC to a final release tag:"
-echo "  ./script/release/tag-release.sh --rc-tag ${TAG_NAME} --push"
+echo "  ./script/release/05-tag-release.sh --rc-tag ${TAG_NAME} --push"
 echo "=========================================="

@@ -19,7 +19,7 @@
 
 # Release scripts
 
-Local-first release tooling for the unified Apache KIE Drools repository.
+Local-first release tooling for the Apache KIE repository.
 Since the 10.3.x consolidation, **drools, optaplanner, kogito-runtimes, and
 kogito-apps are all modules of the same root POM** — so the release process is
 now a single-repo, single-command workflow.
@@ -30,16 +30,33 @@ you no longer depend on it for the mechanics.
 
 ---
 
-## Scripts
+## Terminology & Lifecycle Stages
 
-| Script | Purpose |
-|---|---|
-| [`update-version.sh`](#update-versionsh) | Update all Maven module versions + data-index image tag |
-| [`build.sh`](#buildsh) | Build the full reactor (optionally with jitexecutor native) |
-| [`rc-commit.sh`](#rc-commitsh) | Create the R commit and RC git tag |
-| [`deploy-to-staging.sh`](#deploy-to-stagingsh) | Deploy JARs to Apache Nexus staging |
-| [`tag-release.sh`](#tag-releasesh) | Promote an approved RC tag → final release tag |
-| [`release-all.sh`](#release-allsh) | Orchestrate all of the above in one command |
+To avoid confusion between different release phases:
+
+| Term | Stage | Meaning & Scope |
+|---|---|---|
+| **`update-version`** | Automation A / D | Updates Maven POM versions across all modules in the reactor to stream snapshots (`10.3.999-SNAPSHOT`) or exact release versions (`10.3.0`). |
+| **`rc-commit` / `rc-tag`** | Automation D.1 | Creates a temporary branch, bumps to the release version, creates the R-commit, tags the Git RC (`10.3.0-rc1`), and cleans up the temporary branch. |
+| **`build`** | Automation D.2 | Compiles the full Maven reactor and installs artifacts to the local `~/.m2/repository`. |
+| **`deploy` / `staging`** | Automation D.3 | GPG signs artifacts and deploys them to the Apache Nexus Staging repository for release vote inspection. |
+| **`tag-release`** | Automation F | Promotes an approved RC tag (e.g., `10.3.0-rc2`) to the final release tag (`10.3.0`) once the release vote passes. |
+| **`promote` / `publish`** | Automation G | Releases the staging repository in Nexus to Maven Central and publishes release distribution files. |
+
+---
+
+## Numbered Scripts
+
+Scripts are numbered to clearly communicate their intended execution order:
+
+| Number / Script | Automation Stage | Purpose |
+|---|---|---|
+| **[`01-update-version.sh`](#01-update-versionsh)** *(alias: `update-version.sh`)* | Automation A / D | Update Maven POM versions + data-index image tag property |
+| **[`02-rc-commit.sh`](#02-rc-commitsh)** *(alias: `rc-commit.sh`)* | Automation D.1 | Create temporary branch, R commit, and RC git tag |
+| **[`03-build.sh`](#03-buildsh)** *(alias: `build.sh`)* | Automation D.2 | Build the full reactor to local `~/.m2/repository` |
+| **[`04-deploy-to-staging.sh`](#04-deploy-to-stagingsh)** *(alias: `deploy-to-staging.sh`)* | Automation D.3 | Deploy signed JARs to Apache Nexus staging repository |
+| **[`05-tag-release.sh`](#05-tag-releasesh)** *(alias: `tag-release.sh`)* | Automation F | Promote an approved RC tag → final release tag |
+| **[`release-all.sh`](#release-allsh)** | Orchestrator (D) | Orchestrate steps 02 → 03 → 04 in one single command |
 
 Make the scripts executable once:
 
@@ -81,64 +98,42 @@ pushed or published.  When you are ready to share the RC:
 
 ## Scripts in detail
 
-### `update-version.sh`
+### `01-update-version.sh`
 
 Updates every Maven module's `<version>` in the reactor and the
 `data-index-ephemeral.image.tagVersion` property in
 `kogito-quarkus-workflow-common-deployment`.
 
 ```bash
-# Switch to a dev (SNAPSHOT) version — D commit
-./script/release/update-version.sh 10.3.999-SNAPSHOT
+# Switch to a dev (SNAPSHOT) version — D commit (Automation A)
+./script/release/01-update-version.sh 10.3.999-SNAPSHOT
 
-# Switch to the exact release version — R commit (usually via rc-commit.sh)
-./script/release/update-version.sh 10.3.0
+# Switch to the exact release version — R commit (usually automated by 02-rc-commit.sh)
+./script/release/01-update-version.sh 10.3.0
 ```
 
 > **Stream vs release version.** Development branches keep
-> `major.minor.999-SNAPSHOT` as their version.  The version is only set to
+> `major.minor.999-SNAPSHOT` as their version. The version is only set to
 > the exact release version (`10.3.0`) in the short-lived R commit created by
-> `rc-commit.sh`.
+> `02-rc-commit.sh`.
 
 ---
 
-### `build.sh`
-
-Builds the full reactor.  JARs are installed to your local `~/.m2` repository.
-
-```bash
-# Standard release build (tests skipped)
-./script/release/build.sh --skip-tests
-
-# With jitexecutor native binary (requires GraalVM JDK 17 + Docker 25+)
-./script/release/build.sh --skip-tests --jitexecutor-native
-
-# With extra Maven options (e.g. parallelism)
-./script/release/build.sh --skip-tests --maven-opts "-T 4"
-```
-
-**Requirements for `--jitexecutor-native`:**
-
-- GraalVM for JDK 17 (`$JAVA_HOME` must point to a GraalVM distribution)
-- Docker 25+ daemon running
-
----
-
-### `rc-commit.sh`
+### `02-rc-commit.sh`
 
 Creates the **R commit** (version bump to the exact release version) on a
-short-lived *local-only* release branch, then tags that commit.  The release
+short-lived *local-only* release branch, then tags that commit. The release
 branch is deleted afterwards — only the tag survives.
 
 ```bash
 # Local tag only (safe — nothing is pushed)
-./script/release/rc-commit.sh --version 10.3.0 --tag 10.3.0-rc1
+./script/release/02-rc-commit.sh --version 10.3.0 --tag 10.3.0-rc1
 
 # Push the tag to origin when you're ready
-./script/release/rc-commit.sh --version 10.3.0 --tag 10.3.0-rc1 --push
+./script/release/02-rc-commit.sh --version 10.3.0 --tag 10.3.0-rc1 --push
 
 # See what would happen without making changes
-./script/release/rc-commit.sh --version 10.3.0 --tag 10.3.0-rc1 --dry-run
+./script/release/02-rc-commit.sh --version 10.3.0 --tag 10.3.0-rc1 --dry-run
 ```
 
 The script refuses to run if there are any uncommitted changes in the working
@@ -146,19 +141,33 @@ tree.
 
 ---
 
-### `deploy-to-staging.sh`
+### `03-build.sh`
 
-Deploys the locally-built JARs to Apache Nexus staging.  **Dry run by
+Builds the full reactor. JARs are installed to your local `~/.m2` repository.
+
+```bash
+# Standard release build (tests skipped)
+./script/release/03-build.sh --skip-tests
+
+# With extra Maven options (e.g. parallelism)
+./script/release/03-build.sh --skip-tests --maven-opts "-T 4"
+```
+
+---
+
+### `04-deploy-to-staging.sh`
+
+Deploys the locally-built JARs to Apache Nexus staging. **Dry run by
 default** — the `--deploy` flag is required to actually upload anything.
 
 ```bash
 # Dry run — prints the Maven command without executing it
-./script/release/deploy-to-staging.sh --tag 10.3.0-rc1
+./script/release/04-deploy-to-staging.sh --tag 10.3.0-rc1
 
 # Actually deploy to Apache Nexus staging
 MAVEN_SETTINGS=/path/to/settings.xml \
 MAVEN_GPG_PASSPHRASE=secret \
-./script/release/deploy-to-staging.sh --tag 10.3.0-rc1 --deploy
+./script/release/04-deploy-to-staging.sh --tag 10.3.0-rc1 --deploy
 ```
 
 After deployment, log in to <https://repository.apache.org>, close the
@@ -174,17 +183,16 @@ staging repository, and share the URL with the release vote thread on
 
 ---
 
-### `tag-release.sh`
+### `05-tag-release.sh`
 
-Promotes a winning RC tag to the final release tag (AUTOMATION F in
-`release.txt`).
+Promotes a winning RC tag to the final release tag (AUTOMATION F).
 
 ```bash
 # Local tag only
-./script/release/tag-release.sh --rc-tag 10.3.0-rc2
+./script/release/05-tag-release.sh --rc-tag 10.3.0-rc2
 
 # Push the release tag to origin
-./script/release/tag-release.sh --rc-tag 10.3.0-rc2 --push
+./script/release/05-tag-release.sh --rc-tag 10.3.0-rc2 --push
 ```
 
 ---
@@ -198,7 +206,6 @@ Orchestrates the full RC cycle in one command.
     --version 10.3.0 \
     --tag 10.3.0-rc1 \
     [--skip-tests] \
-    [--jitexecutor-native] \
     [--maven-opts "<opts>"] \
     [--deploy] \
     [--staging-url <url>] \
@@ -258,7 +265,6 @@ as follows:
 | Trigger OptaPlanner release job | *(same command — same reactor)* |
 | Trigger Kogito Runtimes release job | *(same command — same reactor)* |
 | Trigger Kogito Apps release job | *(same command — same reactor)* |
-| Trigger jitexecutor-native workflow | `--jitexecutor-native` flag on `build.sh` |
 | `git tag 10.x.0 10.x.0-rcN` in all repos | `./script/release/tag-release.sh` |
 
 `kie-tools` remains a separate repository and is unaffected by these scripts.

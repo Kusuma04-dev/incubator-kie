@@ -32,12 +32,12 @@ set -euo pipefail
 #                                         └── [R commit] ──> tag: 10.3.0-rc1
 #
 # Usage:
-#   ./script/release/rc-commit.sh <version> [--tag <tag-name>] [--push] [--dry-run]
-#   ./script/release/rc-commit.sh --version <release-version> --tag <tag-name>
+#   ./script/release/02-rc-commit.sh <version> [--tag <tag-name>] [--push] [--dry-run]
+#   ./script/release/02-rc-commit.sh --version <release-version> --tag <tag-name>
 #
 # Examples:
-#   ./script/release/rc-commit.sh 10.3.0 --tag 10.3.0-rc1
-#   ./script/release/rc-commit.sh --version 10.3.0 --tag 10.3.0-rc2 --push
+#   ./script/release/02-rc-commit.sh 10.3.0 --tag 10.3.0-rc1
+#   ./script/release/02-rc-commit.sh --version 10.3.0 --tag 10.3.0-rc2 --push
 #
 # Options:
 #   <version> | --version <ver>   Exact release version, e.g. 10.3.0
