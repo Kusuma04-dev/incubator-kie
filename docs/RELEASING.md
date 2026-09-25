@@ -21,7 +21,7 @@
 
 The canonical release documentation and single source of truth for the Apache KIE release procedure is maintained on the Apache KIE community website:
 
-👉 **[Apache KIE Release Procedure](https://kie.apache.org/community/)** (hosted in the [`apache/incubator-kie-website`](https://github.com/apache/incubator-kie-website) repository).
+👉 **[Apache KIE Release Procedure](https://kie.apache.org/community/release-procedure)** (hosted in the [`apache/incubator-kie-website`](https://github.com/apache/incubator-kie-website) repository under `docs/community/devs/release-procedure.md`).
 
 ---
 
@@ -52,3 +52,4 @@ This repository (`incubator-kie`) provides local-first release scripts located i
 ```
 
 For Jenkins pipeline jobs, see `.ci/jenkins/Jenkinsfile.103xplus.*`.
+
