@@ -1,0 +1,55 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: "CI :: Java 17 Compatibility"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["**"]
+    types: [opened, reopened, ready_for_review, synchronize]
+
+concurrency:
+  group: ${{ github.event.pull_request && format('ci-java17-compat-pr-{0}', github.event.pull_request.number) || format('ci-java17-compat-push-main-{0}', github.sha) }}
+  cancel-in-progress: true
+
+jobs:
+  java17-compat:
+    name: "Java 17 Compatibility Check"
+    if: github.event.action != 'closed' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'SETUP :: Checkout'
+        uses: actions/checkout@v4
+
+      - name: 'SETUP :: Java 17 (Compatibility Check)'
+        uses: actions/setup-java@v6
+        with:
+          java-version: 17
+          distribution: temurin
+          cache: maven
+
+      - name: 'BUILD :: Maven build (Java 17 Compatibility)'
+        shell: bash
+        run: |
+          mvn -B -fae \
+            -Dmaven.test.failure.ignore=false \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            clean install
