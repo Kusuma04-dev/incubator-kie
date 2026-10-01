@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: 'CI :: Build'
+name: 'CI :: Build (Java 21)'
 
 on:
   pull_request:
@@ -42,7 +42,7 @@ jobs:
 
   build:
     if: github.event.action != 'closed'
-    name: '${{ matrix.os }}, Java ${{ matrix.java }}'
+    name: '${{ matrix.os }}, Java 21'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
