@@ -265,6 +265,6 @@ as follows:
 | Trigger OptaPlanner release job | *(same command — same reactor)* |
 | Trigger Kogito Runtimes release job | *(same command — same reactor)* |
 | Trigger Kogito Apps release job | *(same command — same reactor)* |
-| `git tag 10.x.0 10.x.0-rcN` in all repos | `./script/release/tag-release.sh` |
+| `git tag 10.x.0 10.x.0-rcN` in all repos | `./script/release/05-tag-release.sh` |
 
 `kie-tools` remains a separate repository and is unaffected by these scripts.

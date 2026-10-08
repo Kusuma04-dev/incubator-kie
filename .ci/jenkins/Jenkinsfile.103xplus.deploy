@@ -54,35 +54,61 @@ pipeline {
                         currentBuild.displayName = params.DISPLAY_NAME
                     }
 
-                    if (isCreatePr()) {
+                    if (isRelease() || isCreatePr()) {
                         // Verify version is set
                         assert getProjectVersion()
+
+                        if (isRelease()) {
+                            // Verify if on right release branch
+                            assert getBuildBranch() == util.getReleaseBranchFromVersion(getProjectVersion())
+                        }
                     }
 
                     dir(getRepoName()) {
                         checkoutRepo()
-
+                    }
+                }
+            }
+            post {
+                success {
+                    script {
                         setDeployPropertyIfNeeded('git.branch', getBuildBranch())
                         setDeployPropertyIfNeeded('git.author', getGitAuthor())
                         setDeployPropertyIfNeeded('project.version', getProjectVersion())
+                        setDeployPropertyIfNeeded('release', isRelease())
+                    }
+                }
+            }
+        }
+
+        stage('Prepare for PR') {
+            when {
+                expression { return isCreatePr() }
+            }
+            steps {
+                script {
+                    dir(getRepoName()) {
+                        if (githubscm.isBranchExist('origin', getPRBranch())) {
+                            githubscm.removeRemoteBranch('origin', getPRBranch(), getGitAuthorPushCredsId())
+                        }
+                        githubscm.createBranch(getPRBranch())
                     }
                 }
             }
         }
 
         stage('Update project version') {
+            when {
+                expression { return getProjectVersion() }
+            }
             steps {
                 script {
-                    dir(getRepoName()) {
-                        if (getProjectVersion()) {
-                            maven.mvnVersionsSet(
-                                getMavenCommand(),
-                                getProjectVersion(),
-                                !isStreamDevVersion(),
-                                false,
-                                getRootPomPath()
-                            )
-                        }
+                    configFileProvider([configFile(fileId: env.MAVEN_SETTINGS_CONFIG_FILE_ID, variable: 'MAVEN_SETTINGS_FILE')]) {
+                        maven.mvnVersionsSet(
+                            getMavenCommand().withSettingsXmlFile(MAVEN_SETTINGS_FILE),
+                            getProjectVersion(),
+                            !isRelease()
+                        )
                     }
                 }
             }
@@ -91,21 +117,28 @@ pipeline {
         stage('Build & Deploy repo') {
             steps {
                 script {
-                    dir(getRepoName()) {
-                        withCredentials([usernamePassword(credentialsId: env.MAVEN_REPO_CREDS_ID, usernameVariable: 'REPOSITORY_USER', passwordVariable: 'REPOSITORY_TOKEN')]) {
-                            configFileProvider([configFile(fileId: env.MAVEN_SETTINGS_CONFIG_FILE_ID, variable: 'MAVEN_SETTINGS_FILE')]) {
-                                String installOrDeploy = shouldDeployToRepository() ? 'deploy' : 'install'
-                                mavenCommand = getMavenCommand()
-                                    .withOptions(env.BUILD_MVN_OPTS ? [ env.BUILD_MVN_OPTS ] : [])
-                                    .withOptions(env.DROOLS_BUILD_MVN_OPTS ? [ env.DROOLS_BUILD_MVN_OPTS ] : [])
-                                    .withProperty('quickTests')
-                                    .withProperty('maven.test.failure.ignore', true)
-                                    .skipTests(params.SKIP_TESTS)
+                    withCredentials([usernamePassword(credentialsId: env.MAVEN_REPO_CREDS_ID, usernameVariable: 'REPOSITORY_USER', passwordVariable: 'REPOSITORY_TOKEN')]) {
+                        def installOrDeploy
+                        if (shouldDeployToRepository()) {
+                            installOrDeploy = "deploy -DdeployAtEnd -Dapache.repository.username=${REPOSITORY_USER} -Dapache.repository.password=${REPOSITORY_TOKEN} -DretryFailedDeploymentCount=5"
+                        } else {
+                            installOrDeploy = 'install'
+                        }
+                        def mavenCommand = getMavenCommand()
+                            .withOptions(env.DROOLS_BUILD_MVN_OPTS ? [ env.DROOLS_BUILD_MVN_OPTS ] : [])
+                            .withOptions(env.BUILD_MVN_OPTS_CURRENT ? [ env.BUILD_MVN_OPTS_CURRENT ] : [])
+                            .withProperty('maven.test.failure.ignore', true)
+                            .skipTests(params.SKIP_TESTS)
 
-                                configFileProvider([configFile(fileId: env.MAVEN_SETTINGS_CONFIG_FILE_ID, variable: 'MAVEN_SETTINGS_FILE')]) {
-                                    mavenCommand.withSettingsXmlFile(MAVEN_SETTINGS_FILE).run("clean $installOrDeploy")
-                                }
-                            }
+                        if (isRelease()) {
+                            releaseUtils.gpgImportKeyFromStringWithoutPassword(getReleaseGpgSignKeyCredsId())
+                            mavenCommand
+                                .withProfiles(['apache-release'])
+                                .withProperty('only.reproducible')
+                        }
+
+                        configFileProvider([configFile(fileId: env.MAVEN_SETTINGS_CONFIG_FILE_ID, variable: 'MAVEN_SETTINGS_FILE')]) {
+                            mavenCommand.withSettingsXmlFile(MAVEN_SETTINGS_FILE).run("clean $installOrDeploy")
                         }
                     }
                 }
@@ -113,10 +146,8 @@ pipeline {
             post {
                 always {
                     script {
-                        dir(getRepoName()) {
-                            junit testResults: '**/target/surefire-reports/**/*.xml, **/target/failsafe-reports/**/*.xml', allowEmptyResults: true
-                            util.archiveConsoleLog()
-                        }
+                        saveReports()
+                        util.archiveConsoleLog()
                     }
                 }
             }
@@ -124,23 +155,56 @@ pipeline {
 
         stage('Create PR') {
             when {
-                expression {
-                    return isCreatePr()
-                }
+                expression { return isCreatePr() }
             }
             steps {
                 script {
                     dir(getRepoName()) {
-                        String prTitle = "[${getBuildBranch()}] Update version to ${getProjectVersion()}"
-                        String prBody = "Generated by build ${BUILD_TAG}: ${BUILD_URL}"
-                        githubscm.setUserConfigFromCreds(getGitAuthorPushCredsId())
-                        githubscm.createPR(getPRBranch(), prTitle, prBody, getBuildBranch())
-                        setDeployPropertyIfNeeded("${getRepoName()}.pr.link", githubscm.getPRUrl(getPRBranch(), getBuildBranch()))
+                        if (githubscm.isThereAnyChanges()) {
+                            commitAndCreatePR()
+                        } else {
+                            println '[WARN] no changes to commit'
+                        }
+                    }
+                }
+            }
+            post {
+                success {
+                    script {
+                        setDeployPropertyIfNeeded("${getRepoName()}.pr.source.uri", "https://github.com/${getGitAuthor()}/${getRepoName()}")
+                        setDeployPropertyIfNeeded("${getRepoName()}.pr.source.ref", getPRBranch())
+                        setDeployPropertyIfNeeded("${getRepoName()}.pr.target.uri", "https://github.com/${getGitAuthor()}/${getRepoName()}")
+                        setDeployPropertyIfNeeded("${getRepoName()}.pr.target.ref", getBuildBranch())
+                    }
+                }
+            }
+        }
+
+        stage('Commit and Create Tag') {
+            when {
+                expression { return isRelease() }
+            }
+            steps {
+                script {
+                    dir(getRepoName()) {
+                        if (githubscm.isThereAnyChanges()) {
+                            def commitMsg = "[${getBuildBranch()}] Update version to ${getProjectVersion()}"
+                            githubscm.setUserConfigFromCreds(getGitAuthorPushCredsId())
+                            githubscm.commitChanges(commitMsg, {
+                                githubscm.findAndStageNotIgnoredFiles('pom.xml')
+                                githubscm.findAndStageNotIgnoredFiles('antora.yml')
+                            })
+                        } else {
+                            println '[WARN] no changes to commit'
+                        }
+                        githubscm.tagRepository(getGitTagName())
+                        githubscm.pushRemoteTag('origin', getGitTagName(), getGitAuthorPushCredsId())
                     }
                 }
             }
         }
     }
+
     post {
         always {
             script {
@@ -148,29 +212,44 @@ pipeline {
                 saveDeployProperties()
             }
         }
+        unsuccessful {
+            sendNotification()
+        }
         cleanup {
             cleanWs(notFailBuild: true, deleteDirs: true, patterns: [[pattern: 'deploy.properties', type: 'EXCLUDE']])
         }
-        success {
-            script {
-                sendNotification()
-            }
-        }
-        unsuccessful {
-            sendErrorNotification()
-        }
     }
+}
+
+void saveReports() {
+    junit testResults: '**/target/surefire-reports/**/*.xml, **/target/failsafe-reports/**/*.xml, **/target/invoker-reports/**/TEST-*.xml', allowEmptyResults: true
+}
+
+void checkoutRepo() {
+    deleteDir()
+    checkout(githubscm.resolveRepository(getRepoName(), getGitAuthor(), getBuildBranch(), false, getGitAuthorCredsId()))
+    // need to manually checkout branch since on a detached branch after checkout command
+    sh "git checkout ${getBuildBranch()}"
+}
+
+void commitAndCreatePR() {
+    def commitMsg = "[${getBuildBranch()}] Update version to ${getProjectVersion()}"
+    def prBody = "Generated by build ${BUILD_TAG}: ${BUILD_URL}.\nPlease do not merge, it should be merged automatically."
+    githubscm.setUserConfigFromCreds(getGitAuthorPushCredsId())
+    githubscm.commitChanges(commitMsg, {
+        githubscm.findAndStageNotIgnoredFiles('pom.xml')
+        githubscm.findAndStageNotIgnoredFiles('antora.yml')
+    })
+    githubscm.pushObject('origin', getPRBranch(), getGitAuthorPushCredsId())
+    deployProperties["${getRepoName()}.pr.link"] = githubscm.createPRWithLabels(commitMsg, prBody, getBuildBranch(), ['skip-ci'] as String[], getGitAuthorCredsId())
 }
 
 void sendNotification() {
     if (params.SEND_NOTIFICATION) {
         mailer.sendMarkdownTestSummaryNotification('Deploy', "[${getBuildBranch()}] Drools", [env.DROOLS_CI_EMAIL_TO])
+    } else {
+        echo 'No notification sent per configuration'
     }
-}
-
-void sendErrorNotification() {
-    sendNotification()
-    mailer.sendMarkdownErrorNotification('Deploy', "[${getBuildBranch()}] Drools", [env.DROOLS_CI_EMAIL_TO])
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -193,12 +272,12 @@ boolean shouldDeployToRepository() {
     return env.MAVEN_DEPLOY_REPOSITORY || getGitAuthor() == 'apache'
 }
 
-boolean isCreatePr() {
-    return params.CREATE_PR
+boolean isRelease() {
+    return env.RELEASE ? env.RELEASE.toBoolean() : false
 }
 
-boolean isStreamDevVersion() {
-    return params.STREAM_DEV_VERSION
+boolean isCreatePr() {
+    return params.CREATE_PR
 }
 
 String getRepoName() {
@@ -206,11 +285,16 @@ String getRepoName() {
 }
 
 String getGitAuthor() {
+    // GIT_AUTHOR can be env or param
     return "${GIT_AUTHOR}"
 }
 
 String getBuildBranch() {
     return params.BUILD_BRANCH_NAME
+}
+
+String getProjectVersion() {
+    return params.PROJECT_VERSION
 }
 
 String getPRBranch() {
@@ -225,20 +309,17 @@ String getGitAuthorPushCredsId() {
     return env.GIT_AUTHOR_PUSH_CREDS_ID ?: env.GIT_AUTHOR_CREDS_ID
 }
 
-String getProjectVersion() {
-    return params.PROJECT_VERSION
-}
-
-String getRootPomPath() {
-    return env.ROOT_POM_PATH ?: 'pom.xml'
-}
-
 MavenCommand getMavenCommand(String directory = '') {
     directory = directory ?: getRepoName()
-    mvnCmd = new MavenCommand(this, ['-fae', '-ntp'])
+    def mvnCmd = new MavenCommand(this, ['-fae', '-ntp'])
+                .withOptions(env.BUILD_MVN_OPTS ? [ env.BUILD_MVN_OPTS ] : [])
                 .inDirectory(directory)
-                .withOptions(env.DROOLS_BUILD_MVN_OPTS ? [ env.DROOLS_BUILD_MVN_OPTS ] : [])
+                .withProperty('full')
     return mvnCmd
+}
+
+String getReleaseGpgSignKeyCredsId() {
+    return env.RELEASE_GPG_SIGN_KEY_CREDS_ID
 }
 
 String getGitTagName() {

@@ -26,15 +26,15 @@ set -euo pipefail
 # the same reactor, a single `mvn clean install` is enough.
 #
 # Usage:
-#   ./script/release/build.sh [--skip-tests] [--maven-opts <opts>]
+#   ./script/release/03-build.sh [--skip-tests] [--maven-opts <opts>]
 #
 # Flags:
 #   --skip-tests          Skip all tests (default: tests are run)
 #   --maven-opts <opts>   Extra Maven options appended to the command
 #
 # Examples:
-#   ./script/release/build.sh --skip-tests
-#   ./script/release/build.sh --skip-tests --maven-opts "-T 4"
+#   ./script/release/03-build.sh --skip-tests
+#   ./script/release/03-build.sh --skip-tests --maven-opts "-T 4"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"

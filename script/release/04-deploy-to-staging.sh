@@ -105,7 +105,7 @@ echo "========================================"
 if ! git rev-parse "${TAG_NAME}" &>/dev/null; then
     echo ""
     echo "ERROR: Git tag '${TAG_NAME}' not found in this repository."
-    echo "       Run rc-commit.sh first, or check out the tag manually."
+    echo "       Run 02-rc-commit.sh first, or check out the tag manually."
     exit 1
 fi
 
@@ -160,5 +160,5 @@ echo "Next steps:"
 echo "  1. Log in to https://repository.apache.org and close the staging repo."
 echo "  2. Share the staging repo URL with the release vote thread."
 echo "  3. Once the vote passes, run:"
-echo "     ./script/release/tag-release.sh --rc-tag ${TAG_NAME}"
+echo "     ./script/release/05-tag-release.sh --rc-tag ${TAG_NAME}"
 echo "========================================"

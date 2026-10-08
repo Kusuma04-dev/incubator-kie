@@ -17,9 +17,12 @@
  * under the License.
  */
 
+import org.jenkinsci.plugins.workflow.libs.Library
+@Library('jenkins-pipeline-shared-libraries')_
+
 pipeline {
     agent {
-        label 'ubuntu'
+        label util.avoidFaultyNodes('ubuntu')
     }
 
     options {
@@ -27,15 +30,20 @@ pipeline {
         timeout(time: 360, unit: 'MINUTES')
     }
 
+    environment {
+        DROOLS_CI_EMAIL_TO = credentials("${JENKINS_EMAIL_CREDS_ID}")
+    }
+
     parameters {
-        string(name: 'RELEASE_VERSION', defaultValue: '10.3.0', description: 'Exact release version, e.g. 10.3.0', trim: true)
-        string(name: 'TAG_NAME', defaultValue: '10.3.0-rc1', description: 'RC or Release tag name, e.g. 10.3.0-rc1', trim: true)
+        string(name: 'RELEASE_VERSION', defaultValue: '', description: 'Exact release version, e.g. 10.3.0', trim: true)
+        string(name: 'TAG_NAME', defaultValue: '', description: 'RC or Release tag name, e.g. 10.3.0-rc1', trim: true)
         booleanParam(name: 'SKIP_TESTS', defaultValue: true, description: 'Skip running tests during reactor build')
         booleanParam(name: 'DEPLOY', defaultValue: true, description: 'Deploy artifacts to Apache Nexus staging')
         string(name: 'STAGING_URL', defaultValue: '', description: 'Custom Nexus staging URL (optional)')
         booleanParam(name: 'PUSH_TAG', defaultValue: true, description: 'Push the git tag to origin')
         string(name: 'EXTRA_MAVEN_OPTS', defaultValue: '', description: 'Extra Maven CLI options to pass to build.sh')
         booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Dry run without making remote git or staging changes')
+        booleanParam(name: 'SEND_NOTIFICATION', defaultValue: false, description: 'Send email notification on failure')
     }
 
     stages {
@@ -86,6 +94,15 @@ pipeline {
     post {
         always {
             cleanWs()
+        }
+        unsuccessful {
+            script {
+                if (params.SEND_NOTIFICATION) {
+                    mailer.sendMarkdownErrorNotification('Release', "[${params.RELEASE_VERSION}] KIE", [env.DROOLS_CI_EMAIL_TO])
+                } else {
+                    echo 'No notification sent per configuration'
+                }
+            }
         }
     }
 }

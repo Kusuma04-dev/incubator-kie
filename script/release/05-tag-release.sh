@@ -30,11 +30,11 @@ set -euo pipefail
 # By default the tag is created locally only.  Pass --push to publish it.
 #
 # Usage:
-#   ./script/release/tag-release.sh --rc-tag <rc-tag> [--push] [--dry-run]
+#   ./script/release/05-tag-release.sh --rc-tag <rc-tag> [--push] [--dry-run]
 #
 # Examples:
-#   ./script/release/tag-release.sh --rc-tag 10.3.0-rc2
-#   ./script/release/tag-release.sh --rc-tag 10.3.0-rc2 --push
+#   ./script/release/05-tag-release.sh --rc-tag 10.3.0-rc2
+#   ./script/release/05-tag-release.sh --rc-tag 10.3.0-rc2 --push
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"

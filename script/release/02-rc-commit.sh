@@ -136,7 +136,7 @@ if [[ "${DRY_RUN}" == "true" ]]; then
     echo ""
     echo "[DRY RUN] Would execute:"
     echo "  git checkout -b ${RELEASE_BRANCH}"
-    echo "  ./script/release/update-version.sh ${RELEASE_VERSION}"
+    echo "  ./script/release/01-update-version.sh ${RELEASE_VERSION}"
     echo "  git add -A"
     echo "  git commit -m \"chore: release ${RELEASE_VERSION}\""
     echo "  git tag -a ${TAG_NAME} -m \"Release ${TAG_NAME}\""
@@ -178,7 +178,7 @@ git checkout -b "${RELEASE_BRANCH}"
 
 echo ""
 echo "--- Updating version to ${RELEASE_VERSION} ---"
-"${SCRIPT_DIR}/update-version.sh" "${RELEASE_VERSION}"
+"${SCRIPT_DIR}/01-update-version.sh" "${RELEASE_VERSION}"
 
 echo ""
 echo "--- Committing R commit ---"
@@ -215,6 +215,6 @@ if [[ "${PUSH}" == "false" ]]; then
 fi
 echo ""
 echo "Next steps:"
-echo "  ./script/release/build.sh --skip-tests"
-echo "  ./script/release/deploy-to-staging.sh --tag ${TAG_NAME}"
+echo "  ./script/release/03-build.sh --skip-tests"
+echo "  ./script/release/04-deploy-to-staging.sh --tag ${TAG_NAME}"
 echo "========================================"
