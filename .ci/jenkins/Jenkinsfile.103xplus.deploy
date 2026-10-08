@@ -149,7 +149,7 @@ pipeline {
             }
         }
         cleanup {
-            cleanWs(filter: 'deploy.properties', includeEmptyDirs: false, notFailBuild: true, deleteDirs: true)
+            cleanWs(notFailBuild: true, deleteDirs: true, patterns: [[pattern: 'deploy.properties', type: 'EXCLUDE']])
         }
         success {
             script {
@@ -202,23 +202,23 @@ boolean isStreamDevVersion() {
 }
 
 String getGitAuthor() {
-    return params.GIT_AUTHOR
+    return params.GIT_AUTHOR ?: env.GIT_AUTHOR ?: 'apache'
 }
 
 String getGitAuthorPushCredsId() {
-    return env.GIT_AUTHOR_CREDS_ID
+    return env.GIT_AUTHOR_CREDS_ID ?: ''
 }
 
 String getBuildBranch() {
-    return params.BUILD_BRANCH
+    return params.BUILD_BRANCH_NAME ?: params.BUILD_BRANCH ?: 'main'
 }
 
 String getPRBranch() {
-    return "${params.PR_BRANCH_PREFIX}_${PR_BRANCH_HASH}"
+    return "${params.PR_BRANCH_PREFIX ?: 'version-update'}_${PR_BRANCH_HASH}"
 }
 
 String getRepoName() {
-    return env.REPO_NAME
+    return env.REPO_NAME ?: 'incubator-kie'
 }
 
 String getProjectVersion() {
