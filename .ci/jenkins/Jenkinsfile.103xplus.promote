@@ -17,6 +17,12 @@
  * under the License.
  */
 
+// 10.3.x+ promote pipeline — mirrors Jenkinsfile.promote with 10.3+ specifics:
+//   - 'Create release' stage uses Nexus nexus-staging:release (same as old)
+//   - 'Tag final release' stage delegates to 05-tag-release.sh (tags the
+//     approved RC commit, not the branch tip as the old pipeline did)
+//   - 'Upload drools binaries and documentation' stage retained for main stream
+
 import org.jenkinsci.plugins.workflow.libs.Library
 @Library('jenkins-pipeline-shared-libraries')_
 
@@ -61,13 +67,18 @@ pipeline {
             }
         }
 
-        stage('Merge deploy PR and tag') {
+        stage('Merge deploy PR') {
+            // NOTE: tagLatest() removed here intentionally.
+            // In the 103xplus flow the final release tag is created by the
+            // separate "Tag final release" stage below, which delegates to
+            // 05-tag-release.sh so the tag always points to the approved
+            // RC commit — NOT the current branch tip.  Calling tagLatest()
+            // here would create a duplicate tag at the wrong commit.
             steps {
                 script {
                     dir(getRepoName()) {
                         approveAndMergePR(getDeployPrLink())
                         checkoutRepo()
-                        tagLatest()
                     }
                 }
             }
@@ -83,6 +94,33 @@ pipeline {
                         }
                         githubscm.createReleaseWithGeneratedReleaseNotes(getGitTag(), getBuildBranch(), githubscm.getPreviousTagFromVersion(getGitTag()), getGitAuthorPushCredsId())
                         githubscm.updateReleaseBody(getGitTag(), getGitAuthorPushCredsId())
+                    }
+                }
+            }
+        }
+
+        stage('Tag final release') {
+            // Delegate final-tag creation to 05-tag-release.sh so the release tag
+            // always points to the approved RC commit — NOT the current branch tip.
+            // This matches the documented strategy: the R commit lives under the RC
+            // tag only; the development branch is never disturbed.
+            when {
+                expression { return getGitTag()?.trim() }
+            }
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: env.GIT_AUTHOR_PUSH_CREDS_ID, keyFileVariable: 'GIT_SSH_KEY')
+                ]) {
+                    script {
+                        dir(getRepoName()) {
+                            sh """#!/usr/bin/env bash
+                            set -euo pipefail
+                            # Fetch the RC tag so the script can resolve it.
+                            git fetch origin "refs/tags/${getGitTag()}:refs/tags/${getGitTag()}"
+                            chmod +x script/release/05-tag-release.sh
+                            ./script/release/05-tag-release.sh --rc-tag "${getGitTag()}" --push
+                            """
+                        }
                     }
                 }
             }
@@ -109,7 +147,6 @@ pipeline {
             }
         }
     }
-
     post {
         unsuccessful {
             sendNotification()

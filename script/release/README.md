@@ -215,9 +215,9 @@ Orchestrates the full RC cycle in one command.
 
 Steps executed in order:
 
-1. `rc-commit.sh` — R commit + tag
-2. `build.sh` — full build at the tag commit
-3. `deploy-to-staging.sh` — Nexus staging upload *(only if `--deploy`)*
+1. `02-rc-commit.sh` — R commit + tag
+2. `03-build.sh` — full build at the tag commit
+3. `04-deploy-to-staging.sh` — Nexus staging upload *(only if `--deploy`)*
 
 ---
 
@@ -265,6 +265,6 @@ as follows:
 | Trigger OptaPlanner release job | *(same command — same reactor)* |
 | Trigger Kogito Runtimes release job | *(same command — same reactor)* |
 | Trigger Kogito Apps release job | *(same command — same reactor)* |
-| `git tag 10.x.0 10.x.0-rcN` in all repos | `./script/release/05-tag-release.sh` |
+| `git tag 10.x.0 10.x.0-rcN` in all repos | `./script/release/tag-release.sh` |
 
 `kie-tools` remains a separate repository and is unaffected by these scripts.

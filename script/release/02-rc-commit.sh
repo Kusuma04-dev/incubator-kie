@@ -104,7 +104,15 @@ RELEASE_BRANCH="release/${TAG_NAME}"
 
 cd "${REPO_ROOT}"
 
-CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+# Capture original ref: branch name when attached, commit SHA when detached
+# (Jenkins SCM checkouts are typically detached; `git rev-parse --abbrev-ref HEAD`
+#  returns "HEAD" in that case, which cannot be restored via `git checkout HEAD`
+#  because the branch is still pointing there.  We need the actual commit SHA.)
+if git symbolic-ref --quiet HEAD &>/dev/null; then
+    CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+else
+    CURRENT_BRANCH="$(git rev-parse HEAD)"
+fi
 
 echo "========================================"
 echo "Apache KIE repo — RC commit + tag"
@@ -125,10 +133,18 @@ if [[ "${CURRENT_BRANCH}" != "${STREAM_BRANCH}" ]]; then
     echo ""
 fi
 
-# Check there are no uncommitted changes before we do anything.
+# Check there are no uncommitted changes (staged, unstaged, or untracked) before
+# we do anything.  Untracked files matter here because git add -A below will
+# include them in the R commit.
 if ! git diff --quiet || ! git diff --cached --quiet; then
     echo "ERROR: There are uncommitted changes in the working tree."
     echo "       Commit or stash them before running this script."
+    exit 1
+fi
+if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+    echo "ERROR: There are untracked files in the working tree:"
+    git ls-files --others --exclude-standard | sed 's/^/  /'
+    echo "       Remove or .gitignore them before running this script."
     exit 1
 fi
 

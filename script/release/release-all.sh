@@ -139,7 +139,6 @@ run_step() {
 # ── STEP 1 (Automation D.1): R commit + RC tag ───────────────────────────────
 
 RC_COMMIT_SCRIPT="${SCRIPT_DIR}/02-rc-commit.sh"
-[[ ! -f "${RC_COMMIT_SCRIPT}" ]] && RC_COMMIT_SCRIPT="${SCRIPT_DIR}/rc-commit.sh"
 
 RC_COMMIT_ARGS=("${RC_COMMIT_SCRIPT}" "--version" "${RELEASE_VERSION}" "--tag" "${TAG_NAME}")
 [[ "${PUSH_TAG}" == "true" ]] && RC_COMMIT_ARGS+=("--push")
@@ -150,7 +149,6 @@ run_step "R commit + RC tag (02-rc-commit.sh)" "${RC_COMMIT_ARGS[@]}"
 # ── STEP 2 (Automation D.2): Build ───────────────────────────────────────────
 
 BUILD_SCRIPT="${SCRIPT_DIR}/03-build.sh"
-[[ ! -f "${BUILD_SCRIPT}" ]] && BUILD_SCRIPT="${SCRIPT_DIR}/build.sh"
 
 BUILD_ARGS=("${BUILD_SCRIPT}")
 [[ "${SKIP_TESTS}" == "true" ]]       && BUILD_ARGS+=("--skip-tests")
@@ -175,7 +173,6 @@ fi
 
 if [[ "${DEPLOY}" == "true" ]]; then
     DEPLOY_SCRIPT="${SCRIPT_DIR}/04-deploy-to-staging.sh"
-    [[ ! -f "${DEPLOY_SCRIPT}" ]] && DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-to-staging.sh"
 
     DEPLOY_ARGS=("${DEPLOY_SCRIPT}" "--tag" "${TAG_NAME}" "--deploy")
     [[ -n "${STAGING_URL}" ]] && DEPLOY_ARGS+=("--staging-url" "${STAGING_URL}")

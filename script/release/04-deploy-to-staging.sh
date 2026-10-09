@@ -27,24 +27,26 @@ set -euo pipefail
 # remotely.  Pass --deploy to actually upload to Nexus.
 #
 # Usage:
-#   ./script/release/deploy-to-staging.sh --tag <rc-tag> [--deploy] [--staging-url <url>]
+#   ./script/release/04-deploy-to-staging.sh --tag <rc-tag> [--deploy] [--staging-url <url>]
 #
 # Examples:
 #   # dry run (safe — prints the Maven command that would be run)
-#   ./script/release/deploy-to-staging.sh --tag 10.3.0-rc1
+#   ./script/release/04-deploy-to-staging.sh --tag 10.3.0-rc1
 #
 #   # actually deploy to Apache Nexus staging
-#   ./script/release/deploy-to-staging.sh --tag 10.3.0-rc1 --deploy
+#   ./script/release/04-deploy-to-staging.sh --tag 10.3.0-rc1 --deploy
 #
 #   # deploy to a custom staging URL
-#   ./script/release/deploy-to-staging.sh --tag 10.3.0-rc1 --deploy \
+#   ./script/release/04-deploy-to-staging.sh --tag 10.3.0-rc1 --deploy \
 #       --staging-url https://repository.apache.org/service/local/staging/deploy/maven2
 #
 # Environment variables consumed when --deploy is active:
-#   MAVEN_SETTINGS   Path to a settings.xml with Nexus credentials (required).
-#                    The settings file must define a server with id "apache.releases.https"
-#                    (or the id set via --server-id) carrying the deployer credentials.
+#   MAVEN_SETTINGS         Path to a settings.xml with Nexus credentials (required).
+#                          The settings file must define a server with id "apache.releases.https"
+#                          (or the id set via --server-id) carrying the deployer credentials.
 #   MAVEN_GPG_PASSPHRASE   GPG passphrase for signing (required for Apache releases).
+#                          Passed to the GPG agent via the gpg-agent pinentry loopback
+#                          mechanism; NOT exposed on the Maven command line.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -105,7 +107,7 @@ echo "========================================"
 if ! git rev-parse "${TAG_NAME}" &>/dev/null; then
     echo ""
     echo "ERROR: Git tag '${TAG_NAME}' not found in this repository."
-    echo "       Run 02-rc-commit.sh first, or check out the tag manually."
+    echo "       Run rc-commit.sh first, or check out the tag manually."
     exit 1
 fi
 
@@ -114,6 +116,9 @@ fi
 DEPLOY_MVN_FLAGS=(
     "-DskipTests"
     "-Dfull"
+    # Activate the apache-release profile so the source/javadoc and GPG-signing
+    # goals defined there are executed (required for Apache releases).
+    "-Papache-release"
     "-DaltDeploymentRepository=${SERVER_ID}::default::${STAGING_URL}"
 )
 
@@ -121,9 +126,13 @@ if [[ -n "${MAVEN_SETTINGS:-}" ]]; then
     DEPLOY_MVN_FLAGS+=("-s" "${MAVEN_SETTINGS}")
 fi
 
-if [[ -n "${MAVEN_GPG_PASSPHRASE:-}" ]]; then
-    DEPLOY_MVN_FLAGS+=("-Dgpg.passphrase=${MAVEN_GPG_PASSPHRASE}")
-fi
+# NOTE: MAVEN_GPG_PASSPHRASE is intentionally NOT added to the Maven command
+# line — exposing it there would print it in captured console logs.
+# The standard GPG Maven plugin (version 3+) reads the passphrase from the
+# environment variable MAVEN_GPG_PASSPHRASE via pinentry-loopback automatically.
+# For older plugin versions, configure loopback in ~/.gnupg/gpg-agent.conf:
+#   allow-loopback-pinentry
+# and pass: -Dgpg.useagent=false -Dgpg.loopback=true in MAVEN_SETTINGS.
 
 echo ""
 if [[ "${DEPLOY}" == "false" ]]; then
@@ -138,15 +147,21 @@ if [[ "${DEPLOY}" == "false" ]]; then
 fi
 
 # ── Checkout the exact tag commit before deploying ───────────────────────────
-ORIG_REF="$(git rev-parse --abbrev-ref HEAD)"
+# Save the original ref as the commit SHA when in detached HEAD state (e.g.,
+# Jenkins SCM checkout).  `git rev-parse --abbrev-ref HEAD` returns "HEAD" when
+# detached, which cannot be used to restore the checkout afterwards.
+if git symbolic-ref --quiet HEAD &>/dev/null; then
+    ORIG_REF="$(git rev-parse --abbrev-ref HEAD)"
+else
+    ORIG_REF="$(git rev-parse HEAD)"
+fi
 
 echo "--- Checking out tag ${TAG_NAME} ---"
 git checkout "${TAG_NAME}"
 
 echo ""
 echo "--- Deploying to Nexus staging (${STAGING_URL}) ---"
-# shellcheck disable=SC2068
-mvn deploy ${DEPLOY_MVN_FLAGS[@]}
+mvn deploy "${DEPLOY_MVN_FLAGS[@]}"
 
 echo ""
 echo "--- Returning to ${ORIG_REF} ---"

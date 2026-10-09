@@ -25,11 +25,11 @@ set -euo pipefail
 # 10.3.x consolidation).
 #
 # Usage:
-#   ./script/release/update-version.sh <version>
+#   ./script/release/01-update-version.sh <version>
 #
 # Examples:
-#   ./script/release/update-version.sh 10.3.999-SNAPSHOT   # dev/stream version
-#   ./script/release/update-version.sh 10.3.0              # release version
+#   ./script/release/01-update-version.sh 10.3.999-SNAPSHOT   # dev/stream version
+#   ./script/release/01-update-version.sh 10.3.0              # release version
 #
 # The script also updates the data-index ephemeral image tag property that lives
 # inside kogito-quarkus (was a separate step in the old multi-repo flow).
@@ -48,12 +48,23 @@ fi
 
 # Derive the stream name (e.g. 10.3.0 → 10.3.x, 10.3.999-SNAPSHOT → 10.3.x).
 # Used for the data-index image tag property.
-STREAM_NAME="$(echo "${NEW_VERSION}" | sed 's/^\([0-9]*\.[0-9]*\)\..*/\1.x/')"
+# Special case: 999-SNAPSHOT is the main-stream version; the image tag is "main".
+if [[ "${NEW_VERSION}" == "999-SNAPSHOT" ]]; then
+    STREAM_NAME="main"
+else
+    STREAM_NAME="$(echo "${NEW_VERSION}" | sed 's/^\([0-9]*\.[0-9]*\)\..*/\1.x/')"
+fi
 
 # Detect the current version from the root POM so we can pass -DoldVersion,
 # which skips the full reactor scan and is much faster on a large multi-module
 # repo like this one.
 CURRENT_VERSION="$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout -f "${REPO_ROOT}/pom.xml" 2>/dev/null)"
+
+if [[ -z "${CURRENT_VERSION}" ]]; then
+    echo "ERROR: Could not determine current project version from pom.xml."
+    echo "       Make sure Maven is available and the POM is resolvable."
+    exit 1
+fi
 
 echo "========================================"
 echo "Apache KIE repo — version update"

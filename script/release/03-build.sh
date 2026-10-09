@@ -40,7 +40,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 SKIP_TESTS=false
-EXTRA_MVN_OPTS=""
+# Extra Maven opts stored as an array so spaces inside individual opts are
+# preserved correctly (avoids unquoted word-splitting and command injection).
+EXTRA_MVN_OPTS=()
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -49,7 +51,10 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --maven-opts)
-            EXTRA_MVN_OPTS="${2:-}"
+            # Accept a single-argument "extra opts" string and split it safely
+            # into array elements using read.  No eval or command substitution.
+            IFS=' ' read -r -a _extra <<< "${2:-}"
+            EXTRA_MVN_OPTS+=("${_extra[@]}")
             shift 2
             ;;
         *)
@@ -62,16 +67,16 @@ done
 
 cd "${REPO_ROOT}"
 
-# ── Assemble Maven flags ───────────────────────────────────────────────────────
+# ── Assemble Maven flags as a Bash array ──────────────────────────────────────
 
-MVN_FLAGS="-Dfull"
+MVN_FLAGS=("-Dfull")
 
 if [[ "${SKIP_TESTS}" == "true" ]]; then
-    MVN_FLAGS="${MVN_FLAGS} -DskipTests"
+    MVN_FLAGS+=("-DskipTests")
 fi
 
-if [[ -n "${EXTRA_MVN_OPTS}" ]]; then
-    MVN_FLAGS="${MVN_FLAGS} ${EXTRA_MVN_OPTS}"
+if [[ "${#EXTRA_MVN_OPTS[@]}" -gt 0 ]]; then
+    MVN_FLAGS+=("${EXTRA_MVN_OPTS[@]}")
 fi
 
 # ── Build ──────────────────────────────────────────────────────────────────────
@@ -79,12 +84,11 @@ fi
 echo "========================================"
 echo "Apache KIE repo — build"
 echo "Skip tests        : ${SKIP_TESTS}"
-echo "Maven flags       : ${MVN_FLAGS}"
+echo "Maven flags       : ${MVN_FLAGS[*]}"
 echo "========================================"
 echo ""
 
-# shellcheck disable=SC2086
-mvn clean install ${MVN_FLAGS}
+mvn clean install "${MVN_FLAGS[@]}"
 
 echo ""
 echo "========================================"
