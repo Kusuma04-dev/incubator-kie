@@ -244,6 +244,7 @@ setupSpecificBuildChainNightlyJob('sonarcloud', setupSonarProjectKeyEnv(nightlyJ
 
 // Release jobs
 setupDeployJob()
+setup103xplusDeployJob()
 setupPromoteJob()
 
 // Weekly deploy job
@@ -328,6 +329,45 @@ void setupDeployJob() {
             booleanParam('SKIP_TESTS', false, 'Skip tests')
 
             booleanParam('CREATE_PR', false, 'Should we create a PR with the changes ?')
+            stringParam('PROJECT_VERSION', '', 'Optional if not RELEASE. If RELEASE, cannot be empty.')
+            stringParam('DROOLS_PR_BRANCH', '', 'PR branch name')
+
+            stringParam('GIT_TAG_NAME', '', 'Optional if not RELEASE. Tag to be created in the repository')
+
+            booleanParam('SEND_NOTIFICATION', false, 'In case you want the pipeline to send a notification on CI channel for this run.')
+        }
+    }
+}
+// for testing
+void setup103xplusDeployJob() {
+    def jobParams = JobParamsUtils.getBasicJobParams(this, 'drools-103xplus-deploy', JobType.RELEASE, "${jenkins_path}/Jenkinsfile.103xplus.deploy", 'Drools 10.3.x+ Deploy')
+    JobParamsUtils.setupJobParamsAgentDockerBuilderImageConfiguration(this, jobParams)
+    jobParams.env.putAll([
+            PROPERTIES_FILE_NAME: 'deployment.properties',
+            JENKINS_EMAIL_CREDS_ID: "${JENKINS_EMAIL_CREDS_ID}",
+
+            REPO_NAME: 'incubator-kie-drools',
+
+            GIT_AUTHOR: "${GIT_AUTHOR_NAME}",
+            GIT_AUTHOR_CREDS_ID: "${GIT_AUTHOR_CREDENTIALS_ID}",
+            GIT_AUTHOR_PUSH_CREDS_ID: "${GIT_AUTHOR_PUSH_CREDENTIALS_ID}",
+
+            MAVEN_SETTINGS_CONFIG_FILE_ID: Utils.getMavenSettingsConfigFileId(this, JobType.RELEASE.name),
+            MAVEN_DEPENDENCIES_REPOSITORY: "${MAVEN_ARTIFACTS_REPOSITORY}",
+            MAVEN_DEPLOY_REPOSITORY: Utils.getMavenArtifactsUploadRepositoryUrl(this, JobType.RELEASE.name),
+            MAVEN_REPO_CREDS_ID: Utils.getMavenArtifactsUploadRepositoryCredentialsId(this, JobType.RELEASE.name),
+
+            DROOLS_STREAM: Utils.getStream(this),
+    ])
+    KogitoJobTemplate.createPipelineJob(this, jobParams)?.with {
+        parameters {
+            stringParam('DISPLAY_NAME', '', 'Setup a specific build display name')
+
+            stringParam('BUILD_BRANCH_NAME', "${GIT_BRANCH}", 'Set the Git branch to checkout')
+
+            booleanParam('SKIP_TESTS', false, 'Skip tests')
+
+            booleanParam('CREATE_PR', false, 'Should we create a PR with the changes?')
             stringParam('PROJECT_VERSION', '', 'Optional if not RELEASE. If RELEASE, cannot be empty.')
             stringParam('DROOLS_PR_BRANCH', '', 'PR branch name')
 
