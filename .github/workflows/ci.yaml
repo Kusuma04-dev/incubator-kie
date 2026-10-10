@@ -21,7 +21,7 @@ name: 'CI :: Build (Java 21)'
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened]
     branches: [main]
     paths-ignore:
       - 'LICENSE'
@@ -41,22 +41,11 @@ concurrency:
 jobs:
 
   build:
-    if: github.event.action != 'closed'
-    name: '${{ matrix.os }}, Java 21'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:   [ubuntu-latest, macos-latest, windows-latest]
-        java: [21]
-        # macos and windows temporarily excluded
-        # due to Docker-dependent tests introduced by the kogito-runtimes merge
-        # failing on non-Linux runners. Re-enable once resolved.
-        exclude:
-          - os: windows-latest
-            java: 21
-          - os: macos-latest
-            java: 21
+    name: 'ubuntu-latest, Java 21'
+    runs-on: ubuntu-latest
+    # macOS and Windows are temporarily excluded due to Docker-dependent tests
+    # introduced by the kogito-runtimes merge failing on non-Linux runners.
+    # Re-enable by restoring the matrix strategy once resolved.
 
     steps:
       - name: 'SETUP :: Set paths for temporary files'
@@ -96,9 +85,9 @@ jobs:
           ref: ${{ github.base_ref }}
 
       - uses: actions/setup-java@v6
-        name: 'SETUP :: Java ${{ matrix.java }}'
+        name: 'SETUP :: Java 21'
         with:
-          java-version: ${{ matrix.java }}
+          java-version: 21
           distribution: temurin
           cache: maven
 
@@ -174,7 +163,7 @@ jobs:
       #   Affected pass  (-pl affected):             builds exactly the affected modules (changed +
       #                                              transitive downstream), running tests.
 
-      - name: "PR CHECK :: BUILD :: Upstream modules${{ github.event_name == 'push' && ' (skipped)' || '' }}"
+      - name: "PR CHECK :: BUILD :: Upstream modules"
         if: github.event_name == 'pull_request'
         shell: bash
         run: |
@@ -182,7 +171,7 @@ jobs:
           [ -z "$pl" ] && echo "No upstream modules. Skipping." && exit 0
           mvn -T 1C --batch-mode --no-transfer-progress -fae -DskipTests -DskipITs -Denforcer.skip=true -Dcheckstyle.skip=true -Dformatter.skip=true -Darchunit.skip=true -Dsurefire.redirectTestOutputToFile=true -pl "$pl" install
 
-      - name: "PR CHECK :: BUILD :: Changed and affected modules${{ github.event_name == 'push' && ' (skipped)' || '' }}"
+      - name: "PR CHECK :: BUILD :: Changed and affected modules"
         if: github.event_name == 'pull_request'
         shell: bash
         run: |
@@ -190,7 +179,7 @@ jobs:
           [ -z "$pl" ] && echo "No affected modules. Skipping." && exit 0
           mvn --batch-mode --no-transfer-progress -fae -Dsurefire.redirectTestOutputToFile=true -Dfull -Dreproducible -pl "$pl" install
 
-      - name: "CI :: BUILD :: Full${{ github.event_name == 'pull_request' && ' (skipped)' || '' }}"
+      - name: "CI :: BUILD :: Full"
         if: github.event_name == 'push'
         shell: bash
         run: mvn --batch-mode --no-transfer-progress -fae -Dsurefire.redirectTestOutputToFile=true -Dfull -Dreproducible install
@@ -199,9 +188,9 @@ jobs:
         if: always()
         shell: bash
         env:
-          MERMAID_EXPANDED: ${{ matrix.os == 'ubuntu-latest' && matrix.java == 21 }}
-          MATRIX_OS: ${{ matrix.os }}
-          MATRIX_JAVA: ${{ matrix.java }}
+          MERMAID_EXPANDED: 'true'
+          MATRIX_OS: ubuntu-latest
+          MATRIX_JAVA: 21
         run: |
           MAVEN_PL_AFFECTED=$(paste -sd, "$MAVEN_PL_AFFECTED_FILE" 2>/dev/null || true) \
           MAVEN_PL_UPSTREAM=$(paste -sd, "$MAVEN_PL_UPSTREAM_FILE" 2>/dev/null || true) \
@@ -212,14 +201,14 @@ jobs:
         uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
-          name: build-logs_${{ matrix.os }}_java-${{ matrix.java }}
+          name: build-logs_ubuntu-latest_java-21
           path: '**/build.log'
 
       - name: Upload Build Compare
         uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
-          name: build-compare_${{ matrix.os }}_java-${{ matrix.java }}
+          name: build-compare_ubuntu-latest_java-21
           path: |
             **/*.buildcompare
             **/*.buildinfo
