@@ -57,8 +57,8 @@ DRY_RUN="${DRY_RUN:-false}"
 # Derive major.minor stream (e.g. 10.3.0 → 10.3)
 STREAM="$(echo "${RELEASE_VERSION}" | sed 's/^\([0-9]*\.[0-9]*\)\..*/\1/')"
 
-REMOTE_BINARIES_DIR="${FILEMGMT_BASE_PATH}/docs_htdocs/drools/release/${STREAM}.x"
-REMOTE_DOCS_DIR="${FILEMGMT_BASE_PATH}/docs_htdocs/kogito/release/${STREAM}.x"
+REMOTE_BINARIES_DIR="${FILEMGMT_BASE_PATH}/downloads_htdocs/drools/release/${STREAM}.x"
+REMOTE_DOCS_DIR="${FILEMGMT_BASE_PATH}/docs_htdocs/drools/release/${STREAM}.x"
 
 echo "========================================"
 echo "Apache KIE — upload binaries & docs"

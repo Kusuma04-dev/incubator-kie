@@ -30,7 +30,9 @@ set -euo pipefail
 #
 # Flags:
 #   --skip-tests          Skip all tests (default: tests are run)
-#   --maven-opts <opts>   Extra Maven options appended to the command
+#   --maven-opts <opts>   Extra Maven options appended to the command. Split on
+#                         whitespace only; shell-style quoting is NOT honoured,
+#                         so individual options must not contain spaces.
 #
 # Examples:
 #   ./script/release/03-build.sh --skip-tests
@@ -40,8 +42,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 SKIP_TESTS=false
-# Extra Maven opts stored as an array so spaces inside individual opts are
-# preserved correctly (avoids unquoted word-splitting and command injection).
+# Extra Maven opts stored as an array and expanded quoted, so no glob expansion,
+# eval, or command substitution happens. Options are split on whitespace only.
 EXTRA_MVN_OPTS=()
 
 while [[ $# -gt 0 ]]; do
@@ -51,8 +53,8 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --maven-opts)
-            # Accept a single-argument "extra opts" string and split it safely
-            # into array elements using read.  No eval or command substitution.
+            # Accept a single-argument "extra opts" string and split it on
+            # whitespace into array elements using read. Quotes are not parsed.
             IFS=' ' read -r -a _extra <<< "${2:-}"
             EXTRA_MVN_OPTS+=("${_extra[@]}")
             shift 2

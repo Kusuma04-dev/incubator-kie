@@ -71,6 +71,11 @@ if [[ -z "${RC_TAG}" ]]; then
     exit 1
 fi
 
+if [[ ! "${RC_TAG}" =~ -rc[0-9]+$ ]]; then
+    echo "ERROR: --rc-tag must be an RC tag ending in -rc<N> (e.g. 10.3.0-rc2), got '${RC_TAG}'."
+    exit 1
+fi
+
 # Derive the final release tag (strip -rcN suffix).
 RELEASE_TAG="$(echo "${RC_TAG}" | sed 's/-rc[0-9]*$//')"
 
