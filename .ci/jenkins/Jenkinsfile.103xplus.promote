@@ -21,7 +21,7 @@
 //   - agent { label 'ubuntu' } + tools block instead of docker { image AGENT_DOCKER_BUILDER_IMAGE }
 //   - 'Tag final release' stage delegates to 05-tag-release.sh (no shared library)
 //   - 'Create release' stage uses 'gh' CLI instead of githubscm shared-library helpers
-//   - 'Upload drools binaries and documentation' stage uses 03-build.sh directly
+//   - 'Upload drools binaries and documentation' stage runs 03-build.sh (-Dfull) and then upload_filemgmt.sh
 //   - @Library removed entirely
 
 deployProperties = [:]
