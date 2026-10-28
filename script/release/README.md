@@ -64,7 +64,6 @@ Scripts are numbered to clearly communicate their intended execution order:
 | **[`04-deploy-to-staging.sh`](#04-deploy-to-stagingsh)** | Automation D.3 | Deploy signed JARs to Apache Nexus staging repository |
 | **[`05-tag-release.sh`](#05-tag-releasesh)** | Automation F | Promote an approved RC tag → final release tag |
 | **[`release-all.sh`](#release-allsh)** | Orchestrator (D) | Orchestrate steps 02 → 03 → 04 in one single command |
-| **`upload_filemgmt.sh`** | Automation G | Upload the Drools binaries and documentation to the file server. Called by `Jenkinsfile.103xplus.promote` for the `main` stream only |
 
 Make the scripts executable once:
 
@@ -257,15 +256,6 @@ Steps executed in order:
 
 ---
 
-### `upload_filemgmt.sh`
-
-Uploads the Drools binaries and documentation zips (built with `-Dfull`) to the
-file server. It is called by the `Upload drools binaries and documentation`
-stage of `.ci/jenkins/Jenkinsfile.103xplus.promote`, only for the `main`
-stream and only when the Git author is `apache`.
-
----
-
 ## Environment variables
 
 | Variable | Used by | Description |
@@ -291,9 +281,8 @@ Jenkins calls these exact same scripts. The Jenkinsfiles are:
 
 | Jenkinsfile | Calls |
 |---|---|
-| `.ci/jenkins/Jenkinsfile.103xplus.release` | `00-create-stream-branch.sh` (optional) and `release-all.sh` |
-| `.ci/jenkins/Jenkinsfile.103xplus.promote` | `05-tag-release.sh` and `upload_filemgmt.sh` |
-| `.ci/jenkins/Jenkinsfile.103xplus.deploy` | Does its own version bump and `mvn deploy`. It does **not** call these scripts |
+| `.ci/jenkins/Jenkinsfile.103xplus.release-candidate` | `00-create-stream-branch.sh` (optional) and `release-all.sh` |
+| `.ci/jenkins/Jenkinsfile.103xplus.release-promote` | `05-tag-release.sh` |
 
 Credentials, job parameters and the failure/re-run guidance are described in the
 [Release Procedure](https://kie.apache.org/community/devs/release-procedure).
