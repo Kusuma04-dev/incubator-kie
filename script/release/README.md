@@ -281,8 +281,8 @@ Jenkins calls these exact same scripts. The Jenkinsfiles are:
 
 | Jenkinsfile | Calls |
 |---|---|
-| `.ci/jenkins/Jenkinsfile.103xplus.release-candidate` | `00-create-stream-branch.sh` (optional) and `release-all.sh` |
-| `.ci/jenkins/Jenkinsfile.103xplus.release-promote` | `05-tag-release.sh` |
+| `.ci/jenkins/Jenkinsfile.release-candidate` | `00-create-stream-branch.sh` (optional) and `release-all.sh` |
+| `.ci/jenkins/Jenkinsfile.release-promote` | `05-tag-release.sh` |
 
 Credentials, job parameters and the failure/re-run guidance are described in the
 [Release Procedure](https://kie.apache.org/community/devs/release-procedure).
